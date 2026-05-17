@@ -1360,9 +1360,31 @@ int wpa_driver_set_ap_wps_p2p_ie(void* priv, const struct wpabuf* beacon,
                                  const struct wpabuf* proberesp, const struct wpabuf* assocresp) {
     struct i802_bss* bss = priv;
     struct wpa_driver_nl80211_data* drv = bss->drv;
+    struct nl_msg* msg;
+    int ret = -1;
 
-    wpa_printf(MSG_DEBUG, "iface %s set_ap_wps_p2p_ie, ignored", bss->ifname);
-    return 0;
+    wpa_printf(MSG_DEBUG, "iface %s set_ap_wps_p2p_ie", bss->ifname);
+
+    if (!(msg = nl80211_drv_msg(drv, 0, NL80211_CMD_SET_BEACON)) ||
+        nla_put_u32(msg, NL80211_ATTR_IFINDEX, drv->ifindex))
+        goto fail;
+
+    if (beacon)
+        NLA_PUT(msg, NL80211_ATTR_BEACON_HEAD, wpabuf_len(beacon), wpabuf_head(beacon));
+    if (proberesp)
+        NLA_PUT(msg, NL80211_ATTR_PROBE_RESP, wpabuf_len(proberesp), wpabuf_head(proberesp));
+    if (assocresp)
+        NLA_PUT(msg, NL80211_ATTR_IE_ASSOC_RESP, wpabuf_len(assocresp), wpabuf_head(assocresp));
+
+    ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+    if (ret)
+        wpa_printf(MSG_DEBUG, "nl80211: set_ap_wps_p2p_ie failed: ret=%d (%s)",
+                   ret, strerror(-ret));
+    return ret;
+nla_put_failure:
+fail:
+    nlmsg_free(msg);
+    return -ENOBUFS;
 }
 
 void mtk_nl80211_generic_response_event(struct wpa_driver_nl80211_data* drv, u8* data,
